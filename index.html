@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Nota para la TV</title>
+<style>
+  :root {
+    --bg: #0b0d12; --panel: #161b26; --line: #262d3d; --text: #f4f5f7; --dim: #8a93a8;
+    --accent: #f4f5f7; --ok: #34d399; --err: #f87171;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { display: flex; flex-direction: column; min-height: 100dvh;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); gap: 14px; overscroll-behavior: none; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  h1 { font-size: 20px; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
+  .kicker { font-size: 11px; letter-spacing: .18em; color: var(--dim); font-weight: 600; }
+  .from { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 0 12px; height: 44px; }
+  .from span { color: var(--dim); font-size: 13px; }
+  .from input { flex: 1; background: none; border: 0; color: var(--text); font: inherit; outline: none; min-width: 0; height: 100%; }
+  .board { position: relative; width: 100%; aspect-ratio: 4 / 3; border-radius: 18px; overflow: hidden;
+    background: #10131b; border: 1px solid var(--line); touch-action: none; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .hint { position: absolute; inset: 0; display: grid; place-items: center; color: #3b4458; font-size: 15px; pointer-events: none; transition: opacity .2s; }
+  .tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .swatches, .sizes { display: flex; gap: 8px; }
+  .sw { width: 34px; height: 34px; border-radius: 50%; border: 2px solid transparent; padding: 0; cursor: pointer;
+    box-shadow: inset 0 0 0 2px rgba(0,0,0,.25); }
+  .sw[aria-pressed="true"] { border-color: var(--text); transform: scale(1.08); }
+  .sz { width: 38px; height: 38px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line);
+    display: grid; place-items: center; cursor: pointer; padding: 0; }
+  .sz i { display: block; border-radius: 50%; background: var(--text); }
+  .sz[aria-pressed="true"] { border-color: var(--text); }
+  .actions { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 10px; margin-top: auto; }
+  button.act { height: 52px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel);
+    color: var(--text); font: 600 15px/1 inherit; font-family: inherit; cursor: pointer; }
+  button.send { background: var(--text); color: #0b0d12; border-color: var(--text); font-size: 16px; }
+  button:disabled { opacity: .5; }
+  .status { min-height: 20px; text-align: center; font-size: 14px; color: var(--dim); }
+  .status.ok { color: var(--ok); } .status.err { color: var(--err); }
+  .track { display: none; align-items: center; gap: 14px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 16px; padding: 14px 16px; }
+  .track.show { display: flex; }
+  .track .steps { flex: 1; display: grid; gap: 4px; font-size: 14px; color: var(--dim); }
+  .track .steps b { color: var(--text); font-weight: 600; }
+  .track .reply { font-size: 34px; line-height: 1; min-width: 44px; text-align: center; }
+  .track .reply.text { font-size: 17px; font-weight: 700; color: var(--text); min-width: 0; }
+  .banner { position: fixed; left: 12px; right: 12px; top: max(12px, env(safe-area-inset-top)); z-index: 10;
+    display: flex; align-items: center; gap: 14px; padding: 16px 18px; border-radius: 18px;
+    background: #f4f5f7; color: #0b0d12; box-shadow: 0 12px 40px rgba(0,0,0,.5);
+    transform: translateY(-140%); transition: transform .35s cubic-bezier(.2,1.2,.4,1); }
+  .banner.show { transform: none; }
+  .banner .big { font-size: 38px; line-height: 1; }
+  .banner .big.text { font-size: 20px; font-weight: 800; }
+  .banner small { display: block; font-size: 12px; letter-spacing: .14em; font-weight: 700; opacity: .55; }
+  .banner b { font-size: 17px; }
+  .pop { animation: pop .35s cubic-bezier(.2,1.4,.4,1); }
+  @keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: none; opacity: 1; } }
+</style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="kicker">CASA TV</div>
+      <h1>Nota para la TV</h1>
+    </div>
+  </header>
+
+  <label class="from"><span>De:</span><input id="from" maxlength="24" placeholder="Tu nombre" autocomplete="off"></label>
+
+  <div class="board" id="board">
+    <canvas id="c"></canvas>
+    <div class="hint" id="hint">Dibuja aquí con el dedo ✏️</div>
+  </div>
+
+  <div class="tools">
+    <div class="swatches" id="swatches"></div>
+    <div class="sizes" id="sizes"></div>
+  </div>
+
+  <div class="actions">
+    <button class="act" id="undo">Deshacer</button>
+    <button class="act" id="clear">Borrar</button>
+    <button class="act send" id="send">Enviar a la TV</button>
+  </div>
+  <div class="status" id="status"></div>
+  <div class="banner" id="banner" role="status">
+    <div class="big" id="bannerBig"></div>
+    <div><small>LA TV RESPONDIÓ</small><b id="bannerText"></b></div>
+  </div>
+  <div class="track" id="track">
+    <div class="steps">
+      <div id="t1">Enviada</div>
+      <div id="t2">Esperando que la vea…</div>
+    </div>
+    <div class="reply" id="reply"></div>
+  </div>
+
+<script>
+(() => {
+  const W = 1200, H = 900;                 // export size, 4:3 like the TV card
+  const BG = '#10131b';
+  const colors = ['#f4f5f7', '#ff5a5f', '#ffc53d', '#38d9a9', '#4dabf7', '#f783ac'];
+  const sizes = [6, 14, 26];
+
+  const c = document.getElementById('c'), ctx = c.getContext('2d');
+  const hint = document.getElementById('hint'), statusEl = document.getElementById('status');
+  const fromEl = document.getElementById('from'), sendBtn = document.getElementById('send');
+  let color = colors[0], size = sizes[1], strokes = [], current = null;
+
+  // Two ways to reach the TV: straight over the home Wi-Fi (page served by the TV, http),
+  // or through the internet (page on Vercel, https) using the key from the TV's QR code.
+  const CLOUD = {
+    url: 'https://narursszyfdkwyytgtsa.supabase.co',
+    key: 'sb_publishable_G6IBKMqNfM1xy1dlvzJaNQ_f9UwtAkp',
+  };
+  const online = location.protocol === 'https:';
+  let sendKey = '';
+  if (online) {
+    const m = location.hash.match(/k=([0-9a-f]{16,})/i);
+    try {
+      if (m) localStorage.setItem('casa-key', m[1]);
+      sendKey = localStorage.getItem('casa-key') || '';
+    } catch (e) { sendKey = m ? m[1] : ''; }
+    if (m) history.replaceState(null, '', location.pathname); // keep the key out of the address bar
+  }
+  async function rpc(fn, args) {
+    const res = await fetch(CLOUD.url + '/rest/v1/rpc/' + fn, {
+      method: 'POST', cache: 'no-store',
+      headers: { apikey: CLOUD.key, 'Content-Type': 'application/json' },
+      body: JSON.stringify(args),
+    });
+    if (!res.ok) throw new Error(res.status);
+    return res.json();
+  }
+  const api = online ? {
+    async send(from) {
+      const b64 = c.toDataURL('image/png').split(',')[1];
+      return await rpc('send_note', { p_send_key: sendKey, p_from: from, p_image: b64 });
+    },
+    status: id => rpc('note_status', { p_send_key: sendKey, p_id: id }),
+  } : {
+    async send(from) {
+      const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+      const res = await fetch('/note', {
+        method: 'POST',
+        headers: { 'Content-Type': 'image/png', 'X-From': encodeURIComponent(from) },
+        body: blob,
+      });
+      if (!res.ok) throw new Error(res.status);
+      try { return (await res.json()).id || ''; } catch (e) { return ''; }
+    },
+    async status(id) {
+      const r = await fetch('/status?id=' + encodeURIComponent(id), { cache: 'no-store' });
+      const st = await r.json();
+      return { ...st, delivered: st.known };   // on the Wi-Fi a note shows up instantly
+    },
+  };
+
+  try { fromEl.value = localStorage.getItem('casa-from') || ''; } catch (e) {}
+  fromEl.addEventListener('change', () => { try { localStorage.setItem('casa-from', fromEl.value.trim()); } catch (e) {} });
+
+  // Toolbar
+  const sw = document.getElementById('swatches');
+  colors.forEach((col, i) => {
+    const b = document.createElement('button');
+    b.className = 'sw'; b.style.background = col; b.setAttribute('aria-label', 'Color');
+    b.setAttribute('aria-pressed', i === 0);
+    b.onclick = () => { color = col; sw.querySelectorAll('.sw').forEach(x => x.setAttribute('aria-pressed', x === b)); };
+    sw.appendChild(b);
+  });
+  const sz = document.getElementById('sizes');
+  sizes.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.className = 'sz'; b.setAttribute('aria-label', 'Grosor');
+    b.setAttribute('aria-pressed', i === 1);
+    const dot = document.createElement('i'); const d = 4 + i * 6; dot.style.width = dot.style.height = d + 'px';
+    b.appendChild(dot);
+    b.onclick = () => { size = s; sz.querySelectorAll('.sz').forEach(x => x.setAttribute('aria-pressed', x === b)); };
+    sz.appendChild(b);
+  });
+
+  // Canvas works in export coordinates; CSS scales it to the screen.
+  c.width = W; c.height = H;
+  function paint() {
+    ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const s of strokes) drawStroke(s);
+    if (current) drawStroke(current);
+    hint.style.opacity = strokes.length || current ? 0 : 1;
+  }
+  function drawStroke(s) {
+    const p = s.pts;
+    ctx.strokeStyle = s.color; ctx.fillStyle = s.color; ctx.lineWidth = s.size;
+    if (p.length === 1) { ctx.beginPath(); ctx.arc(p[0][0], p[0][1], s.size / 2, 0, Math.PI * 2); ctx.fill(); return; }
+    ctx.beginPath(); ctx.moveTo(p[0][0], p[0][1]);
+    for (let i = 1; i < p.length - 1; i++) {
+      const mx = (p[i][0] + p[i + 1][0]) / 2, my = (p[i][1] + p[i + 1][1]) / 2;
+      ctx.quadraticCurveTo(p[i][0], p[i][1], mx, my);
+    }
+    const last = p[p.length - 1]; ctx.lineTo(last[0], last[1]); ctx.stroke();
+  }
+  function pos(e) {
+    const r = c.getBoundingClientRect();
+    return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height];
+  }
+  c.addEventListener('pointerdown', e => {
+    e.preventDefault(); c.setPointerCapture(e.pointerId);
+    current = { color, size, pts: [pos(e)] }; setStatus(''); paint();
+  });
+  c.addEventListener('pointermove', e => {
+    if (!current) return; e.preventDefault();
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    for (const ev of evs) current.pts.push(pos(ev));
+    paint();
+  });
+  const end = () => { if (current) { strokes.push(current); current = null; paint(); } };
+  c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
+  document.addEventListener('touchmove', e => { if (e.target === c) e.preventDefault(); }, { passive: false });
+
+  document.getElementById('undo').onclick = () => { strokes.pop(); paint(); };
+  document.getElementById('clear').onclick = () => { strokes = []; paint(); setStatus(''); };
+
+  function setStatus(msg, kind) { statusEl.textContent = msg; statusEl.className = 'status' + (kind ? ' ' + kind : ''); }
+
+  sendBtn.onclick = async () => {
+    if (!strokes.length) { setStatus('Dibuja algo primero', 'err'); return; }
+    const from = fromEl.value.trim();
+    try { localStorage.setItem('casa-from', from); } catch (e) {}
+    if (online && !sendKey) { setStatus('Abre esta página escaneando el QR de la TV', 'err'); return; }
+    sendBtn.disabled = true; setStatus('Enviando…');
+    try {
+      const id = await api.send(from);
+      setStatus('');
+      strokes = []; paint();
+      follow(id);
+    } catch (e) {
+      setStatus(online ? 'No se pudo enviar. Revisa tu conexión.' : 'No llegó. ¿Estás en el Wi-Fi de la casa?', 'err');
+    } finally { sendBtn.disabled = false; }
+  };
+
+  // Follow the note: arrived -> seen -> reply. Survives closing and reopening the page.
+  const track = document.getElementById('track'), t1 = document.getElementById('t1'),
+        t2 = document.getElementById('t2'), replyEl = document.getElementById('reply');
+  const banner = document.getElementById('banner'), bannerBig = document.getElementById('bannerBig'),
+        bannerText = document.getElementById('bannerText');
+  let followTimer = null, followId = '', followStart = 0;
+  const store = {
+    get() { try { return JSON.parse(localStorage.getItem('casa-last') || 'null'); } catch (e) { return null; } },
+    set(v) { try { v ? localStorage.setItem('casa-last', JSON.stringify(v)) : localStorage.removeItem('casa-last'); } catch (e) {} },
+  };
+  banner.onclick = () => banner.classList.remove('show');
+
+  function showReply(reply, announce) {
+    const isText = [...reply].length > 2;
+    t2.innerHTML = '<b>Respondió</b>';
+    replyEl.textContent = reply;
+    replyEl.className = 'reply pop' + (isText ? ' text' : '');
+    if (!announce) return;
+    bannerBig.textContent = reply;
+    bannerBig.className = 'big pop' + (isText ? ' text' : '');
+    bannerText.textContent = isText ? '' : 'a tu nota';
+    banner.classList.add('show');
+    setTimeout(() => banner.classList.remove('show'), 6000);
+    if (navigator.vibrate) navigator.vibrate([60, 40, 60]);
+  }
+
+  function follow(id, resumed) {
+    clearTimeout(followTimer);
+    followId = id; followStart = Date.now();
+    track.classList.add('show');
+    t1.innerHTML = '<b>Enviada ✓</b>';
+    t2.textContent = 'Esperando a la TV…';
+    replyEl.textContent = ''; replyEl.className = 'reply';
+    if (!resumed) setTimeout(() => track.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+    if (!id) return;
+    if (!resumed) store.set({ id, reply: null });
+    tick();
+  }
+
+  async function tick(resumed) {
+    clearTimeout(followTimer);
+    const id = followId;
+    if (!id) return;
+    try {
+      const st = await api.status(id);
+      if (id !== followId) return;
+      if (st.delivered) { t1.innerHTML = '<b>Llegó a la TV ✓</b>'; if (!st.seen) t2.textContent = 'Esperando que la vea…'; }
+      if (!st.known) { track.classList.remove('show'); store.set(null); followId = ''; return; }
+      if (st.reply) {
+        const saved = store.get();
+        const isNew = !(saved && saved.id === id && saved.reply === st.reply);
+        showReply(st.reply, isNew);
+        store.set({ id, reply: st.reply });
+        followId = '';
+        return;
+      }
+      if (st.seen) { t2.innerHTML = '<b>Vista 👀</b>'; followId = ''; return; }
+    } catch (e) {}
+    if (Date.now() - followStart < 60 * 60 * 1000) followTimer = setTimeout(tick, 2000);
+  }
+
+  // Phones pause timers in the background: check again as soon as the page is visible.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && followId) tick(); });
+
+  if (online && !sendKey) setStatus('Abre esta página escaneando el QR de la TV', 'err');
+
+  // Reopened the page? Pick up the last note where we left it.
+  const last = store.get();
+  if (last && last.id) {
+    follow(last.id, true);
+  }
+
+  paint();
+})();
+</script>
+</body>
+</html>
