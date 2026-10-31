@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0b0d12">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Casa TV">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <title>Nota para la TV</title>
 <style>
   :root {
@@ -59,6 +65,8 @@
   .banner .big.text { font-size: 20px; font-weight: 800; }
   .banner small { display: block; font-size: 12px; letter-spacing: .14em; font-weight: 700; opacity: .55; }
   .banner b { font-size: 17px; }
+  .install { display: none; font-size: 13px; color: var(--dim); text-align: center; }
+  .install.show { display: block; }
   .pop { animation: pop .35s cubic-bezier(.2,1.4,.4,1); }
   @keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: none; opacity: 1; } }
 </style>
@@ -89,6 +97,7 @@
     <button class="act send" id="send">Enviar a la TV</button>
   </div>
   <div class="status" id="status"></div>
+  <div class="install" id="install">Instálala: toca Compartir → «Añadir a pantalla de inicio» y te avisará cuando la TV responda.</div>
   <div class="banner" id="banner" role="status">
     <div class="big" id="bannerBig"></div>
     <div><small>LA TV RESPONDIÓ</small><b id="bannerText"></b></div>
@@ -120,6 +129,8 @@
     key: 'sb_publishable_G6IBKMqNfM1xy1dlvzJaNQ_f9UwtAkp',
   };
   const online = location.protocol === 'https:';
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const VAPID = 'BAcUgZKWV52GtfQCoilRWVhmeJuocH77baoKtwmrK1j71nJkeJvdZtypb0Gb-q5rR4TovC7d_lvFksY1FfldmpI';
   let sendKey = '';
   if (online) {
     const m = location.hash.match(/k=([0-9a-f]{16,})/i);
@@ -127,7 +138,31 @@
       if (m) localStorage.setItem('casa-key', m[1]);
       sendKey = localStorage.getItem('casa-key') || '';
     } catch (e) { sendKey = m ? m[1] : ''; }
-    if (m) history.replaceState(null, '', location.pathname); // keep the key out of the address bar
+    // The installed app doesn't share storage with Safari, so in the browser the key stays in
+    // the address: "Añadir a pantalla de inicio" saves this exact URL. Once installed, hide it.
+    const want = standalone || !sendKey ? location.pathname : location.pathname + '#k=' + sendKey;
+    if (location.pathname + location.hash !== want) history.replaceState(null, '', want);
+  }
+  const NO_KEY = standalone ? 'Borra la app y vuelve a instalarla desde la página del QR de la TV'
+                            : 'Abre esta página escaneando el QR de la TV';
+  const pushable = online && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  if (online && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+  if (online && sendKey && !standalone && /iPhone|iPad|iPod/.test(navigator.userAgent)) {
+    document.getElementById('install').classList.add('show');
+  }
+  function b64urlToBytes(s) {
+    const b = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - s.length % 4) % 4));
+    return Uint8Array.from(b, ch => ch.charCodeAt(0));
+  }
+  // Ask the TV backend to push "La TV respondió" for this note, if the user allowed notifications.
+  async function watchReply(id) {
+    if (!pushable || !id || Notification.permission !== 'granted') return;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription() ||
+        await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64urlToBytes(VAPID) });
+      await rpc('note_push', { p_send_key: sendKey, p_id: id, p_sub: sub.toJSON() });
+    } catch (e) {}
   }
   async function rpc(fn, args) {
     const res = await fetch(CLOUD.url + '/rest/v1/rpc/' + fn, {
@@ -232,13 +267,17 @@
     if (!strokes.length) { setStatus('Dibuja algo primero', 'err'); return; }
     const from = fromEl.value.trim();
     try { localStorage.setItem('casa-from', from); } catch (e) {}
-    if (online && !sendKey) { setStatus('Abre esta página escaneando el QR de la TV', 'err'); return; }
+    if (online && !sendKey) { setStatus(NO_KEY, 'err'); return; }
+    // iOS only shows the permission prompt from a tap, so ask here, before anything else is awaited.
+    const asked = pushable && Notification.permission === 'default' && (standalone || !/iPhone|iPad|iPod/.test(navigator.userAgent))
+      ? Notification.requestPermission().catch(() => {}) : null;
     sendBtn.disabled = true; setStatus('Enviando…');
     try {
       const id = await api.send(from);
       setStatus('');
       strokes = []; paint();
       follow(id);
+      if (online) Promise.resolve(asked).then(() => watchReply(id));
     } catch (e) {
       setStatus(online ? 'No se pudo enviar. Revisa tu conexión.' : 'No llegó. ¿Estás en el Wi-Fi de la casa?', 'err');
     } finally { sendBtn.disabled = false; }
@@ -308,7 +347,7 @@
   // Phones pause timers in the background: check again as soon as the page is visible.
   document.addEventListener('visibilitychange', () => { if (!document.hidden && followId) tick(); });
 
-  if (online && !sendKey) setStatus('Abre esta página escaneando el QR de la TV', 'err');
+  if (online && !sendKey) setStatus(NO_KEY, 'err');
 
   // Reopened the page? Pick up the last note where we left it.
   const last = store.get();
