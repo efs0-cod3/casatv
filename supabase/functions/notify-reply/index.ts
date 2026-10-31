@@ -21,18 +21,18 @@ Deno.serve(async (req) => {
   if (!note?.reply || !note.push_sub || note.push_sent_reply === note.reply) return new Response("skip");
   if (!PUSH_HOST.test(note.push_sub.endpoint ?? "")) return new Response("endpoint", { status: 400 });
 
-  // Claim this reply so a retry or a second trigger doesn't buzz the phone twice.
-  let claim = db.from("notes").update({ push_sent_reply: note.reply }).eq("id", id).eq("reply", note.reply);
-  claim = note.push_sent_reply === null ? claim.is("push_sent_reply", null) : claim.eq("push_sent_reply", note.push_sent_reply);
-  const { data: claimed } = await claim.select("id");
-  if (!claimed?.length) return new Response("skip");
-
   if (!vapidReady) {
     const { data: priv, error } = await db.rpc("vapid_private_key");
     if (error || !priv) return new Response("vapid", { status: 500 });
     webpush.setVapidDetails("https://casatv-nine.vercel.app", VAPID_PUBLIC, priv);
     vapidReady = true;
   }
+
+  // Claim this reply so a retry or a second trigger doesn't buzz the phone twice.
+  let claim = db.from("notes").update({ push_sent_reply: note.reply }).eq("id", id).eq("reply", note.reply);
+  claim = note.push_sent_reply === null ? claim.is("push_sent_reply", null) : claim.eq("push_sent_reply", note.push_sent_reply);
+  const { data: claimed } = await claim.select("id");
+  if (!claimed?.length) return new Response("skip");
 
   const short = [...note.reply].length <= 2;
   try {
