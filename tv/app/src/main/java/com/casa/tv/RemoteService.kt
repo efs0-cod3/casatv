@@ -3,6 +3,7 @@ package com.casa.tv
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.os.Build
+import android.os.SystemClock
 import android.view.View
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -17,6 +18,7 @@ class RemoteService : AccessibilityService() {
 
     companion object {
         @Volatile var instance: RemoteService? = null
+        private val STOCK_HOMES = setOf("com.amazon.tv.launcher")
     }
 
     override fun onServiceConnected() {
@@ -35,7 +37,25 @@ class RemoteService : AccessibilityService() {
         super.onDestroy()
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+    private var lastHomeAt = 0L
+
+    /**
+     * Fire OS won't let another app be the home screen, so when its launcher comes up (Home
+     * button, wake, boot) we open ours on top of it.
+     */
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        if (event.packageName?.toString() !in STOCK_HOMES) return
+        val prefs = Prefs(this)
+        if (!prefs.paired || !prefs.homeOverride || System.currentTimeMillis() < prefs.homeBypassUntil) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastHomeAt < 1500) return
+        lastHomeAt = now
+        try {
+            startActivity(Intent(this, HomeActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        } catch (_: Throwable) {}
+    }
     override fun onInterrupt() {}
 
     fun key(name: String): Boolean = when (name) {
