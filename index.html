@@ -65,6 +65,25 @@
   .banner .big.text { font-size: 20px; font-weight: 800; }
   .banner small { display: block; font-size: 12px; letter-spacing: .14em; font-weight: 700; opacity: .55; }
   .banner b { font-size: 17px; }
+  .tvstate { display: none; align-items: center; gap: 8px; padding: 7px 12px 7px 10px; border-radius: 999px;
+    background: var(--panel); border: 1px solid var(--line); font-size: 13px; color: var(--dim); white-space: nowrap; }
+  .tvstate.show { display: inline-flex; }
+  .tvstate i { width: 9px; height: 9px; border-radius: 50%; background: #4b5568; }
+  .tvstate.on { color: var(--text); }
+  .tvstate.on i { background: var(--ok); box-shadow: 0 0 0 0 rgba(52,211,153,.6); animation: pulse 2s infinite; }
+  @keyframes pulse { 70% { box-shadow: 0 0 0 7px rgba(52,211,153,0); } 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); } }
+  header { align-items: center; }
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; padding: 4px; }
+  .modes button { height: 40px; border: 0; border-radius: 10px; background: none; color: var(--dim);
+    font: 600 15px/1 inherit; font-family: inherit; cursor: pointer; }
+  .modes button[aria-pressed="true"] { background: var(--text); color: #0b0d12; }
+  textarea.msg { display: none; width: 100%; resize: none; background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; font: 17px/1.35 inherit; font-family: inherit; outline: none; }
+  textarea.msg:focus { border-color: #4b5568; }
+  body.write textarea.msg { display: block; }
+  body.write #sizes, body.write #undo { display: none; }
+  body.write .actions { grid-template-columns: 1fr 2fr; }
   .install { display: none; font-size: 13px; color: var(--dim); text-align: center; }
   .install.show { display: block; }
   .pop { animation: pop .35s cubic-bezier(.2,1.4,.4,1); }
@@ -77,7 +96,13 @@
       <div class="kicker">CASA TV</div>
       <h1>Nota para la TV</h1>
     </div>
+    <div class="tvstate" id="tvstate"><i></i><span id="tvstateText"></span></div>
   </header>
+
+  <div class="modes" role="tablist">
+    <button id="mDraw" aria-pressed="true">✏️ Dibujar</button>
+    <button id="mWrite" aria-pressed="false">Aa Escribir</button>
+  </div>
 
   <label class="from"><span>De:</span><input id="from" maxlength="24" placeholder="Tu nombre" autocomplete="off"></label>
 
@@ -85,6 +110,7 @@
     <canvas id="c"></canvas>
     <div class="hint" id="hint">Dibuja aquí con el dedo ✏️</div>
   </div>
+  <textarea class="msg" id="msg" rows="2" maxlength="160" placeholder="Escribe tu mensaje…"></textarea>
 
   <div class="tools">
     <div class="swatches" id="swatches"></div>
@@ -121,6 +147,8 @@
   const hint = document.getElementById('hint'), statusEl = document.getElementById('status');
   const fromEl = document.getElementById('from'), sendBtn = document.getElementById('send');
   let color = colors[0], size = sizes[1], strokes = [], current = null;
+  let mode = 'draw';
+  const msgEl = document.getElementById('msg');
 
   // Two ways to reach the TV: straight over the home Wi-Fi (page served by the TV, http),
   // or through the internet (page on Vercel, https) using the key from the TV's QR code.
@@ -206,7 +234,7 @@
     const b = document.createElement('button');
     b.className = 'sw'; b.style.background = col; b.setAttribute('aria-label', 'Color');
     b.setAttribute('aria-pressed', i === 0);
-    b.onclick = () => { color = col; sw.querySelectorAll('.sw').forEach(x => x.setAttribute('aria-pressed', x === b)); };
+    b.onclick = () => { color = col; sw.querySelectorAll('.sw').forEach(x => x.setAttribute('aria-pressed', x === b)); paint(); };
     sw.appendChild(b);
   });
   const sz = document.getElementById('sizes');
@@ -224,6 +252,14 @@
   c.width = W; c.height = H;
   function paint() {
     ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
+    if (mode === 'write') {
+      const t = msgEl.value.trim();
+      drawText(t);
+      hint.textContent = 'Escribe abajo ✍️';
+      hint.style.opacity = t ? 0 : 1;
+      return;
+    }
+    hint.textContent = 'Dibuja aquí con el dedo ✏️';
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     for (const s of strokes) drawStroke(s);
     if (current) drawStroke(current);
@@ -240,11 +276,61 @@
     }
     const last = p[p.length - 1]; ctx.lineTo(last[0], last[1]); ctx.stroke();
   }
+  // Typed message: biggest font that fits, centered, in the chosen color.
+  const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  function wrap(text, maxW) {
+    const lines = [];
+    for (const para of text.split('\n')) {
+      let line = '';
+      for (const word of para.split(/\s+/).filter(Boolean)) {
+        const test = line ? line + ' ' + word : word;
+        if (ctx.measureText(test).width <= maxW || !line) {
+          if (!line && ctx.measureText(word).width > maxW) {   // one very long word: cut it
+            let chunk = '';
+            for (const ch of [...word]) {
+              if (ctx.measureText(chunk + ch).width > maxW && chunk) { lines.push(chunk); chunk = ''; }
+              chunk += ch;
+            }
+            line = chunk;
+          } else line = test;
+        } else { lines.push(line); line = word; }
+      }
+      lines.push(line);
+    }
+    return lines;
+  }
+  function drawText(text) {
+    if (!text) return;
+    const pad = 90, maxW = W - pad * 2, maxH = H - pad * 2;
+    let sizePx = 150, lines = [];
+    for (; sizePx >= 34; sizePx -= 6) {
+      ctx.font = `800 ${sizePx}px ${FONT}`;
+      lines = wrap(text, maxW);
+      if (lines.length * sizePx * 1.18 <= maxH && lines.every(l => ctx.measureText(l).width <= maxW)) break;
+    }
+    const lh = sizePx * 1.18, top = (H - lines.length * lh) / 2 + lh / 2;
+    ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    lines.forEach((l, i) => ctx.fillText(l, W / 2, top + i * lh));
+  }
+
+  function setMode(m) {
+    mode = m;
+    document.body.classList.toggle('write', m === 'write');
+    document.getElementById('mDraw').setAttribute('aria-pressed', m === 'draw');
+    document.getElementById('mWrite').setAttribute('aria-pressed', m === 'write');
+    setStatus(''); paint();
+    if (m === 'write') msgEl.focus();
+  }
+  document.getElementById('mDraw').onclick = () => setMode('draw');
+  document.getElementById('mWrite').onclick = () => setMode('write');
+  msgEl.addEventListener('input', () => { setStatus(''); paint(); });
+
   function pos(e) {
     const r = c.getBoundingClientRect();
     return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height];
   }
   c.addEventListener('pointerdown', e => {
+    if (mode === 'write') { msgEl.focus(); return; }
     e.preventDefault(); c.setPointerCapture(e.pointerId);
     current = { color, size, pts: [pos(e)] }; setStatus(''); paint();
   });
@@ -259,12 +345,17 @@
   document.addEventListener('touchmove', e => { if (e.target === c) e.preventDefault(); }, { passive: false });
 
   document.getElementById('undo').onclick = () => { strokes.pop(); paint(); };
-  document.getElementById('clear').onclick = () => { strokes = []; paint(); setStatus(''); };
+  document.getElementById('clear').onclick = () => {
+    if (mode === 'write') msgEl.value = ''; else strokes = [];
+    paint(); setStatus('');
+  };
 
   function setStatus(msg, kind) { statusEl.textContent = msg; statusEl.className = 'status' + (kind ? ' ' + kind : ''); }
 
   sendBtn.onclick = async () => {
-    if (!strokes.length) { setStatus('Dibuja algo primero', 'err'); return; }
+    if (mode === 'draw' && !strokes.length) { setStatus('Dibuja algo primero', 'err'); return; }
+    if (mode === 'write' && !msgEl.value.trim()) { setStatus('Escribe algo primero', 'err'); return; }
+    paint();
     const from = fromEl.value.trim();
     try { localStorage.setItem('casa-from', from); } catch (e) {}
     if (online && !sendKey) { setStatus(NO_KEY, 'err'); return; }
@@ -275,7 +366,8 @@
     try {
       const id = await api.send(from);
       setStatus('');
-      strokes = []; paint();
+      if (mode === 'write') { msgEl.value = ''; msgEl.blur(); } else strokes = [];
+      paint();
       follow(id);
       if (online) Promise.resolve(asked).then(() => watchReply(id));
     } catch (e) {
@@ -330,6 +422,7 @@
       const st = await api.status(id);
       if (id !== followId) return;
       if (st.delivered) { t1.innerHTML = '<b>Llegó a la TV ✓</b>'; if (!st.seen) t2.textContent = 'Esperando que la vea…'; }
+      else if (online && tvOn === false) t2.textContent = 'La TV está apagada: la verán al prenderla';
       if (!st.known) { track.classList.remove('show'); store.set(null); followId = ''; return; }
       if (st.reply) {
         const saved = store.get();
@@ -348,6 +441,35 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden && followId) tick(); });
 
   if (online && !sendKey) setStatus(NO_KEY, 'err');
+
+  // Is the TV on? (online page only; the Wi-Fi page is served by the TV itself, so it's on.)
+  const tvEl = document.getElementById('tvstate'), tvText = document.getElementById('tvstateText');
+  let tvOn = null, tvTimer = null;
+  function ago(iso) {
+    const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    if (mins < 1) return 'ahora';
+    if (mins < 60) return `hace ${mins} min`;
+    const h = Math.round(mins / 60);
+    if (h < 24) return `hace ${h} h`;
+    const d = Math.round(h / 24);
+    return d === 1 ? 'desde ayer' : `hace ${d} días`;
+  }
+  async function checkTv() {
+    clearTimeout(tvTimer);
+    if (!online || !sendKey) return;
+    try {
+      const st = await rpc('tv_status', { p_send_key: sendKey });
+      if (st.known) {
+        tvOn = !!st.on;
+        tvEl.classList.add('show');
+        tvEl.classList.toggle('on', tvOn);
+        tvText.textContent = tvOn ? 'TV encendida' : ('TV apagada' + (st.since ? ' · ' + ago(st.since) : ''));
+      }
+    } catch (e) {}
+    if (!document.hidden) tvTimer = setTimeout(checkTv, 15000);
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkTv(); });
+  checkTv();
 
   // Reopened the page? Pick up the last note where we left it.
   const last = store.get();
