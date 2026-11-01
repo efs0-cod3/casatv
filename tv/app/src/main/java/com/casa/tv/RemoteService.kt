@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.os.Build
 import android.os.SystemClock
+import android.view.KeyEvent
 import android.view.View
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -46,15 +47,35 @@ class RemoteService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         if (event.packageName?.toString() !in STOCK_HOMES) return
-        val prefs = Prefs(this)
-        if (!prefs.paired || !prefs.homeOverride || System.currentTimeMillis() < prefs.homeBypassUntil) return
+        if (!overrideHome()) return
         val now = SystemClock.elapsedRealtime()
         if (now - lastHomeAt < 1500) return
-        lastHomeAt = now
-        try {
+        openHome()
+    }
+
+    /**
+     * The remote's Home button: a short press opens our home straight away, so Amazon's never
+     * shows. The press goes down to the system as usual (a long press still opens its quick
+     * menu); only the release, which is what makes the system go home, is kept from it.
+     */
+    override fun onKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode != KeyEvent.KEYCODE_HOME || event.action != KeyEvent.ACTION_UP) return false
+        if (event.eventTime - event.downTime > 500 || !overrideHome()) return false
+        return openHome()
+    }
+
+    private fun overrideHome(): Boolean {
+        val prefs = Prefs(this)
+        return prefs.paired && prefs.homeOverride && System.currentTimeMillis() >= prefs.homeBypassUntil
+    }
+
+    private fun openHome(): Boolean {
+        lastHomeAt = SystemClock.elapsedRealtime()
+        return try {
             startActivity(Intent(this, HomeActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
-        } catch (_: Throwable) {}
+            true
+        } catch (_: Throwable) { false }
     }
     override fun onInterrupt() {}
 
