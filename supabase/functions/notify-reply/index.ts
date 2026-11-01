@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return new Response("id", { status: 400 });
 
   const { data: note } = await db.from("notes")
-    .select("id, reply, push_sub, push_sent_reply").eq("id", id).maybeSingle();
+    .select("id, household_id, tv_id, reply, push_sub, push_sent_reply").eq("id", id).maybeSingle();
   if (!note?.reply || !note.push_sub || note.push_sent_reply === note.reply) return new Response("skip");
   if (!PUSH_HOST.test(note.push_sub.endpoint ?? "")) return new Response("endpoint", { status: 400 });
 
@@ -34,10 +34,19 @@ Deno.serve(async (req) => {
   const { data: claimed } = await claim.select("id");
   if (!claimed?.length) return new Response("skip");
 
+  // With several TVs, say which one answered ("Sala respondió"), like the page does.
+  let who = "La TV";
+  if (note.tv_id) {
+    const { data: tvs } = await db.from("tvs").select("id, name").eq("household_id", note.household_id)
+      .gt("last_seen", new Date(Date.now() - 30 * 86400e3).toISOString());   // same TVs tv_status lists
+    const tv = tvs?.find((t) => t.id === note.tv_id);
+    if (tv?.name && (tvs?.length ?? 0) > 1) who = tv.name;
+  }
+
   const short = [...note.reply].length <= 2;
   try {
     await webpush.sendNotification(note.push_sub, JSON.stringify({
-      title: short ? `La TV respondió ${note.reply}` : "La TV respondió",
+      title: short ? `${who} respondió ${note.reply}` : `${who} respondió`,
       body: short ? "a tu nota" : note.reply,
       tag: id,
     }), { TTL: 86400, urgency: "high" });

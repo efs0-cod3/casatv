@@ -22,6 +22,7 @@
     font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   body { display: flex; flex-direction: column; min-height: 100dvh;
     padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); gap: 14px; overscroll-behavior: none; }
+  body > * { flex-shrink: 0; }   /* when the page is taller than the screen, scroll instead of squashing */
   header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
   h1 { font-size: 20px; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
   .kicker { font-size: 11px; letter-spacing: .18em; color: var(--dim); font-weight: 600; }
@@ -63,7 +64,7 @@
   .banner.show { transform: none; }
   .banner .big { font-size: 38px; line-height: 1; }
   .banner .big.text { font-size: 20px; font-weight: 800; }
-  .banner small { display: block; font-size: 12px; letter-spacing: .14em; font-weight: 700; opacity: .55; }
+  .banner small { display: block; font-size: 13px; font-weight: 600; opacity: .6; }
   .banner b { font-size: 17px; }
   .tvstate { display: none; align-items: center; gap: 8px; padding: 7px 12px 7px 10px; border-radius: 999px;
     background: var(--panel); border: 1px solid var(--line); font-size: 13px; color: var(--dim); white-space: nowrap; }
@@ -73,6 +74,16 @@
   .tvstate.on i { background: var(--ok); box-shadow: 0 0 0 0 rgba(52,211,153,.6); animation: pulse 2s infinite; }
   @keyframes pulse { 70% { box-shadow: 0 0 0 7px rgba(52,211,153,0); } 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); } }
   header { align-items: center; }
+  .targets { display: none; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
+  .targets::-webkit-scrollbar { display: none; }
+  .targets.show { display: flex; }
+  .targets button { flex: none; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px 0 12px;
+    border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--dim);
+    font: 600 14px/1 inherit; font-family: inherit; cursor: pointer; }
+  .targets button i { width: 8px; height: 8px; border-radius: 50%; background: #4b5568; }
+  .targets button.on i { background: var(--ok); }
+  .targets button.all i { display: none; }
+  .targets button[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: #0b0d12; }
   .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--panel); border: 1px solid var(--line);
     border-radius: 14px; padding: 4px; }
   .modes button { height: 40px; border: 0; border-radius: 10px; background: none; color: var(--dim);
@@ -98,6 +109,8 @@
     </div>
     <div class="tvstate" id="tvstate"><i></i><span id="tvstateText"></span></div>
   </header>
+
+  <div class="targets" id="targets" role="radiogroup" aria-label="Enviar a"></div>
 
   <div class="modes" role="tablist">
     <button id="mDraw" aria-pressed="true">✏️ Dibujar</button>
@@ -126,7 +139,7 @@
   <div class="install" id="install">Instálala: toca Compartir → «Añadir a pantalla de inicio» y te avisará cuando la TV responda.</div>
   <div class="banner" id="banner" role="status">
     <div class="big" id="bannerBig"></div>
-    <div><small>LA TV RESPONDIÓ</small><b id="bannerText"></b></div>
+    <div><small id="bannerWho">La TV respondió</small><b id="bannerText"></b></div>
   </div>
   <div class="track" id="track">
     <div class="steps">
@@ -166,6 +179,8 @@
       if (m) localStorage.setItem('casa-key', m[1]);
       sendKey = localStorage.getItem('casa-key') || '';
     } catch (e) { sendKey = m ? m[1] : ''; }
+    const t = location.hash.match(/tv=([^&]+)/);
+    if (t) { try { localStorage.setItem('casa-target-name', decodeURIComponent(t[1])); localStorage.removeItem('casa-target'); } catch (e) {} }
     // The installed app doesn't share storage with Safari, so in the browser the key stays in
     // the address: "Añadir a pantalla de inicio" saves this exact URL. Once installed, hide it.
     const want = standalone || !sendKey ? location.pathname : location.pathname + '#k=' + sendKey;
@@ -204,7 +219,7 @@
   const api = online ? {
     async send(from) {
       const b64 = c.toDataURL('image/png').split(',')[1];
-      return await rpc('send_note', { p_send_key: sendKey, p_from: from, p_image: b64 });
+      return await rpc('send_note', { p_send_key: sendKey, p_from: from, p_image: b64, p_tv: target === 'all' ? null : target });
     },
     status: id => rpc('note_status', { p_send_key: sendKey, p_id: id }),
   } : {
@@ -387,9 +402,10 @@
   };
   banner.onclick = () => banner.classList.remove('show');
 
-  function showReply(reply, announce) {
+  function showReply(reply, announce, who) {
     const isText = [...reply].length > 2;
-    t2.innerHTML = '<b>Respondió</b>';
+    t2.innerHTML = '<b>' + (who ? esc(who) + ' respondió' : 'Respondió') + '</b>';
+    document.getElementById('bannerWho').textContent = (who || 'La TV') + ' respondió';
     replyEl.textContent = reply;
     replyEl.className = 'reply pop' + (isText ? ' text' : '');
     if (!announce) return;
@@ -421,18 +437,23 @@
     try {
       const st = await api.status(id);
       if (id !== followId) return;
-      if (st.delivered) { t1.innerHTML = '<b>Llegó a la TV ✓</b>'; if (!st.seen) t2.textContent = 'Esperando que la vea…'; }
-      else if (online && tvOn === false) t2.textContent = 'La TV está apagada: la verán al prenderla';
+      const place = st.targets > 1 ? 'las TV' : (st.delivered_tv || 'la TV');
+      if (st.delivered) {
+        t1.innerHTML = '<b>Llegó a ' + esc(st.targets > 1 ? st.delivered_tv || 'la TV' : place) + ' ✓</b>';
+        if (!st.seen) t2.textContent = 'Esperando que la vean…';
+      } else if (online && targetOn() === false) {
+        t2.textContent = (st.targets > 1 ? 'Las TV están apagadas' : 'Esa TV está apagada') + ': la verán al prenderla';
+      }
       if (!st.known) { track.classList.remove('show'); store.set(null); followId = ''; return; }
       if (st.reply) {
         const saved = store.get();
         const isNew = !(saved && saved.id === id && saved.reply === st.reply);
-        showReply(st.reply, isNew);
+        showReply(st.reply, isNew, st.reply_tv);
         store.set({ id, reply: st.reply });
         followId = '';
         return;
       }
-      if (st.seen) { t2.innerHTML = '<b>Vista 👀</b>'; followId = ''; return; }
+      if (st.seen) { t2.innerHTML = '<b>' + (st.seen_tv && st.targets > 1 ? 'Vista en ' + esc(st.seen_tv) : 'Vista') + ' 👀</b>'; followId = ''; return; }
     } catch (e) {}
     if (Date.now() - followStart < 60 * 60 * 1000) followTimer = setTimeout(tick, 2000);
   }
@@ -454,12 +475,69 @@
     const d = Math.round(h / 24);
     return d === 1 ? 'desde ayer' : `hace ${d} días`;
   }
+  // Which TV the note goes to: a TV id, or 'all'.
+  const targetsEl = document.getElementById('targets');
+  let tvs = [], target = 'all';
+  try { target = localStorage.getItem('casa-target') || 'all'; } catch (e) {}
+  function esc(x) { const d = document.createElement('div'); d.textContent = x; return d.innerHTML; }
+  function targetOn() {
+    if (!tvs.length) return tvOn;
+    if (target === 'all') return tvs.some(t => t.on);
+    const t = tvs.find(t => t.id === target);
+    return t ? t.on : null;
+  }
+  function pick(id) {
+    target = id;
+    try { localStorage.setItem('casa-target', id); localStorage.removeItem('casa-target-name'); } catch (e) {}
+    renderTvs();
+  }
+  function renderTvs() {
+    // Several TVs: a chip for each plus "Todas"; the header shows the chosen one.
+    if (tvs.length < 2) { targetsEl.classList.remove('show'); target = tvs[0] ? tvs[0].id : 'all'; }
+    else {
+      targetsEl.classList.add('show');
+      targetsEl.innerHTML = '';
+      const add = (id, label, on, cls) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = (on ? 'on ' : '') + (cls || '');
+        b.setAttribute('aria-pressed', target === id);
+        b.innerHTML = '<i></i>' + esc(label);
+        b.onclick = () => pick(id);
+        targetsEl.appendChild(b);
+      };
+      tvs.forEach(t => add(t.id, t.name, t.on));
+      add('all', 'Todas', false, 'all');
+    }
+    const chosen = tvs.find(t => t.id === target);
+    sendBtn.textContent = tvs.length < 2 ? 'Enviar a la TV' : chosen ? `Enviar a ${chosen.name}` : 'Enviar a todas';
+    if (chosen) {
+      tvOn = chosen.on;
+      const who = tvs.length > 1 ? chosen.name : 'TV';
+      tvText.textContent = chosen.on ? `${who} encendida` : `${who} apagada` + (chosen.since ? ' · ' + ago(chosen.since) : '');
+    } else {
+      const n = tvs.filter(t => t.on).length;
+      tvOn = n > 0;
+      tvText.textContent = n === tvs.length ? 'Todas encendidas' : n === 0 ? 'Todas apagadas' : `${n} de ${tvs.length} encendidas`;
+    }
+    tvEl.classList.add('show');
+    tvEl.classList.toggle('on', !!tvOn);
+  }
   async function checkTv() {
     clearTimeout(tvTimer);
     if (!online || !sendKey) return;
     try {
       const st = await rpc('tv_status', { p_send_key: sendKey });
-      if (st.known) {
+      if (st.known && st.tvs && st.tvs.length) {
+        tvs = st.tvs;
+        let wanted = null;
+        try { wanted = localStorage.getItem('casa-target-name'); } catch (e) {}
+        if (wanted) {
+          const byName = tvs.find(t => t.name.toLowerCase() === wanted.toLowerCase());
+          if (byName) { target = byName.id; try { localStorage.setItem('casa-target', target); localStorage.removeItem('casa-target-name'); } catch (e) {} }
+        }
+        if (target !== 'all' && !tvs.some(t => t.id === target)) target = 'all';
+        renderTvs();
+      } else if (st.known) {
         tvOn = !!st.on;
         tvEl.classList.add('show');
         tvEl.classList.toggle('on', tvOn);
