@@ -3,9 +3,22 @@
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "no-cache" },
-        { "key": "Referrer-Policy", "value": "no-referrer" }
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        }
       ]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/tv",
+      "destination": "https://github.com/efs0-cod3/casatv/releases/latest/download/casatv-tv.apk",
+      "permanent": false
     }
   ]
 }

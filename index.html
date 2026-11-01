@@ -84,7 +84,7 @@
   .targets button.on i { background: var(--ok); }
   .targets button.all i { display: none; }
   .targets button[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: #0b0d12; }
-  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--panel); border: 1px solid var(--line);
+  .modes { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; background: var(--panel); border: 1px solid var(--line);
     border-radius: 14px; padding: 4px; }
   .modes button { height: 40px; border: 0; border-radius: 10px; background: none; color: var(--dim);
     font: 600 15px/1 inherit; font-family: inherit; cursor: pointer; }
@@ -99,6 +99,38 @@
   .install.show { display: block; }
   .pop { animation: pop .35s cubic-bezier(.2,1.4,.4,1); }
   @keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: none; opacity: 1; } }
+  /* Remote control (TVs running the new Casa TV app) */
+  .remote { display: none; flex-direction: column; gap: 12px; }
+  body.remoting .remote { display: flex; }
+  body.remoting .from, body.remoting .board, body.remoting textarea.msg, body.remoting .tools,
+  body.remoting .actions, body.remoting #targets, body.remoting .track, body.remoting .install { display: none !important; }
+  .remote button { touch-action: manipulation; border: 1px solid var(--line); background: var(--panel); color: var(--text);
+    font: 600 16px/1 inherit; font-family: inherit; border-radius: 14px; height: 54px; cursor: pointer; padding: 0 8px;
+    transition: transform .08s, background .08s; }
+  .remote button.hit { transform: scale(.93); background: #273047; }
+  .rtitle { text-align: center; color: var(--dim); font-size: 14px; }
+  .rrow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .rrow3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .dpad { width: min(76vw, 290px); aspect-ratio: 1; margin: 2px auto; display: grid;
+    grid-template: repeat(3, 1fr) / repeat(3, 1fr); gap: 8px; }
+  .dpad button { height: auto; font-size: 22px; }
+  .dpad .u { grid-area: 1 / 2; } .dpad .l { grid-area: 2 / 1; } .dpad .rt { grid-area: 2 / 3; } .dpad .d { grid-area: 3 / 2; }
+  .dpad .ok { grid-area: 2 / 2; border-radius: 50%; background: var(--text); color: #0b0d12; font-size: 19px; }
+  .dpad .ok.hit { background: #c9ccd3; }
+  .apps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .apps button { height: 46px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .apps:empty { display: none; }
+  /* Pairing a new TV */
+  .sheet { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.6); display: grid; align-items: end; padding: 16px; }
+  .sheet[hidden] { display: none; }
+  .sheetCard { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 20px; display: grid; gap: 12px;
+    margin-bottom: env(safe-area-inset-bottom); }
+  .sheetCard h2 { margin: 0; font-size: 21px; }
+  .sheetCard p { margin: 0; color: var(--dim); }
+  .sheetCard input { height: 48px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text);
+    font: 17px inherit; font-family: inherit; padding: 0 14px; outline: none; }
+  .sheetCard input[hidden] { display: none; }
+  .sheetBtns { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; }
 </style>
 </head>
 <body>
@@ -115,6 +147,7 @@
   <div class="modes" role="tablist">
     <button id="mDraw" aria-pressed="true">✏️ Dibujar</button>
     <button id="mWrite" aria-pressed="false">Aa Escribir</button>
+    <button id="mRemote" aria-pressed="false" hidden>🎮 Mando</button>
   </div>
 
   <label class="from"><span>De:</span><input id="from" maxlength="24" placeholder="Tu nombre" autocomplete="off"></label>
@@ -135,7 +168,50 @@
     <button class="act" id="clear">Borrar</button>
     <button class="act send" id="send">Enviar a la TV</button>
   </div>
+  <div class="remote" id="remote">
+    <div class="targets" id="rtvs" role="radiogroup" aria-label="Mando de"></div>
+    <div class="rtitle" id="rtitle"></div>
+    <div class="rrow">
+      <button data-cmd="sleep">⏻ Apagar</button>
+      <button data-cmd="wake">Encender</button>
+    </div>
+    <div class="dpad">
+      <button class="u" data-cmd="key" data-arg="up" aria-label="Arriba">▲</button>
+      <button class="l" data-cmd="key" data-arg="left" aria-label="Izquierda">◀</button>
+      <button class="ok" data-cmd="key" data-arg="ok">OK</button>
+      <button class="rt" data-cmd="key" data-arg="right" aria-label="Derecha">▶</button>
+      <button class="d" data-cmd="key" data-arg="down" aria-label="Abajo">▼</button>
+    </div>
+    <div class="rrow3">
+      <button data-cmd="key" data-arg="back">↩ Atrás</button>
+      <button data-cmd="key" data-arg="home">⌂ Inicio</button>
+      <button data-cmd="key" data-arg="menu">☰ Menú</button>
+    </div>
+    <div class="rrow3">
+      <button data-cmd="key" data-arg="rewind" aria-label="Retroceder">⏪</button>
+      <button data-cmd="key" data-arg="play_pause" aria-label="Reproducir o pausar">⏯</button>
+      <button data-cmd="key" data-arg="forward" aria-label="Adelantar">⏩</button>
+    </div>
+    <div class="rrow3">
+      <button data-cmd="key" data-arg="vol_down" aria-label="Bajar volumen">🔉 −</button>
+      <button data-cmd="key" data-arg="mute" aria-label="Silencio">🔇</button>
+      <button data-cmd="key" data-arg="vol_up" aria-label="Subir volumen">🔊 +</button>
+    </div>
+    <div class="apps" id="rapps"></div>
+  </div>
   <div class="status" id="status"></div>
+  <div class="sheet" id="pairSheet" hidden>
+    <div class="sheetCard">
+      <div class="kicker">NUEVA TV</div>
+      <h2>Vincular esta TV</h2>
+      <p id="pairMsg">Ponle un nombre para reconocerla al enviar notas.</p>
+      <input id="pairName" maxlength="24" placeholder="Por ejemplo: Habitación" autocomplete="off">
+      <div class="sheetBtns">
+        <button class="act" id="pairCancel">Cancelar</button>
+        <button class="act send" id="pairOk">Vincular</button>
+      </div>
+    </div>
+  </div>
   <div class="install" id="install">Instálala: toca Compartir → «Añadir a pantalla de inicio» y te avisará cuando la TV responda.</div>
   <div class="banner" id="banner" role="status">
     <div class="big" id="bannerBig"></div>
@@ -172,8 +248,10 @@
   const online = location.protocol === 'https:';
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   const VAPID = 'BAcUgZKWV52GtfQCoilRWVhmeJuocH77baoKtwmrK1j71nJkeJvdZtypb0Gb-q5rR4TovC7d_lvFksY1FfldmpI';
-  let sendKey = '';
+  let sendKey = '', pairCode = '';
   if (online) {
+    const pr = location.hash.match(/pair=([A-Za-z0-9]{24,64})/);
+    if (pr) pairCode = pr[1];
     const m = location.hash.match(/k=([0-9a-f]{16,})/i);
     try {
       if (m) localStorage.setItem('casa-key', m[1]);
@@ -331,13 +409,17 @@
   function setMode(m) {
     mode = m;
     document.body.classList.toggle('write', m === 'write');
+    document.body.classList.toggle('remoting', m === 'remote');
     document.getElementById('mDraw').setAttribute('aria-pressed', m === 'draw');
     document.getElementById('mWrite').setAttribute('aria-pressed', m === 'write');
+    document.getElementById('mRemote').setAttribute('aria-pressed', m === 'remote');
     setStatus(''); paint();
     if (m === 'write') msgEl.focus();
+    if (m === 'remote') { renderRemote(); keepAwake(); } else clearInterval(pingTimer);
   }
   document.getElementById('mDraw').onclick = () => setMode('draw');
   document.getElementById('mWrite').onclick = () => setMode('write');
+  document.getElementById('mRemote').onclick = () => setMode('remote');
   msgEl.addEventListener('input', () => { setStatus(''); paint(); });
 
   function pos(e) {
@@ -537,6 +619,7 @@
         }
         if (target !== 'all' && !tvs.some(t => t.id === target)) target = 'all';
         renderTvs();
+        renderRemote();
       } else if (st.known) {
         tvOn = !!st.on;
         tvEl.classList.add('show');
@@ -547,6 +630,98 @@
     if (!document.hidden) tvTimer = setTimeout(checkTv, 15000);
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkTv(); });
+
+  // Remote control: TVs running the new Casa TV app with remote support (tv_status → remote).
+  const rtvsEl = document.getElementById('rtvs'), rappsEl = document.getElementById('rapps'),
+        rtitle = document.getElementById('rtitle'), mRemote = document.getElementById('mRemote');
+  let remoteTarget = null, pingTimer = null;
+  try { remoteTarget = localStorage.getItem('casa-remote'); } catch (e) {}
+  function renderRemote() {
+    const list = tvs.filter(t => t.remote);
+    mRemote.hidden = !list.length;
+    if (!list.length) { if (mode === 'remote') setMode('draw'); return; }
+    if (!list.some(t => t.id === remoteTarget)) remoteTarget = list[0].id;
+    rtvsEl.classList.toggle('show', list.length > 1);
+    rtvsEl.innerHTML = '';
+    list.forEach(t => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = t.on ? 'on' : '';
+      b.setAttribute('aria-pressed', t.id === remoteTarget);
+      b.innerHTML = '<i></i>' + esc(t.name);
+      b.onclick = () => {
+        remoteTarget = t.id;
+        try { localStorage.setItem('casa-remote', t.id); } catch (e) {}
+        renderRemote(); keepAwake();
+      };
+      rtvsEl.appendChild(b);
+    });
+    const tv = list.find(t => t.id === remoteTarget);
+    rtitle.textContent = `Mando de ${tv.name} · ${tv.on ? 'encendida' : 'apagada'}`;
+    const apps = Array.isArray(tv.apps) ? tv.apps : [];
+    const sig = tv.id + JSON.stringify(apps);
+    if (rappsEl.dataset.sig !== sig) {
+      rappsEl.dataset.sig = sig;
+      rappsEl.innerHTML = '';
+      apps.slice(0, 18).forEach(a => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.dataset.cmd = 'launch'; b.dataset.arg = a.pkg; b.textContent = a.label;
+        rappsEl.appendChild(b);
+      });
+    }
+  }
+  async function remoteSend(cmd, arg) {
+    if (!remoteTarget) return;
+    try {
+      await rpc('remote_send', { p_send_key: sendKey, p_tv: remoteTarget, p_cmd: cmd, p_arg: arg || null });
+    } catch (e) { setStatus('No llegó al mando. Revisa tu conexión.', 'err'); }
+  }
+  // The TV checks for commands slowly until it gets one; a ping makes it quick while the remote is open.
+  function keepAwake() {
+    clearInterval(pingTimer);
+    remoteSend('ping');
+    pingTimer = setInterval(() => { if (mode === 'remote' && !document.hidden) remoteSend('ping'); }, 45000);
+  }
+  document.getElementById('remote').addEventListener('click', e => {
+    const b = e.target.closest('button[data-cmd]');
+    if (!b) return;
+    b.classList.add('hit'); setTimeout(() => b.classList.remove('hit'), 140);
+    setStatus('');
+    remoteSend(b.dataset.cmd, b.dataset.arg);
+  });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && mode === 'remote') keepAwake(); });
+
+  // Pairing a new TV: its setup screen shows a QR that opens this page with #pair=<code>.
+  if (pairCode) {
+    const sheet = document.getElementById('pairSheet'), pmsg = document.getElementById('pairMsg'),
+          pname = document.getElementById('pairName'), pok = document.getElementById('pairOk');
+    sheet.hidden = false;
+    document.getElementById('pairCancel').onclick = () => { sheet.hidden = true; };
+    if (!sendKey) {
+      pmsg.textContent = 'Primero abre Casa TV en este móvil con el QR de una TV que ya funcione. Después vuelve a escanear este código.';
+      pname.hidden = true; pok.hidden = true;
+    } else {
+      setTimeout(() => pname.focus(), 300);
+      pok.onclick = async () => {
+        const name = pname.value.trim();
+        if (!name) { pmsg.textContent = 'Escribe un nombre para la TV.'; return; }
+        pok.disabled = true; pmsg.textContent = 'Vinculando…';
+        try {
+          const r = await rpc('tv_pair_confirm', { p_send_key: sendKey, p_code: pairCode, p_name: name });
+          if (r.ok) {
+            pmsg.textContent = `¡Listo! «${name}» ya está vinculada. En unos segundos aparece en la TV.`;
+            pname.hidden = true; pok.hidden = true;
+            document.getElementById('pairCancel').textContent = 'Cerrar';
+            try { localStorage.setItem('casa-target-name', name); localStorage.removeItem('casa-target'); } catch (e) {}
+            setTimeout(checkTv, 1500);
+          } else if (r.error === 'name_in_use') {
+            pmsg.textContent = 'Ya hay una TV encendida con ese nombre. Elige otro.';
+          }
+        } catch (e) {
+          pmsg.textContent = 'No se pudo vincular. El código caduca a los 30 minutos: vuelve a escanearlo en la TV.';
+        } finally { pok.disabled = false; }
+      };
+    }
+  }
   checkTv();
 
   // Reopened the page? Pick up the last note where we left it.

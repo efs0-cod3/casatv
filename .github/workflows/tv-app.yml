@@ -1,0 +1,50 @@
+name: App de la TV
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths: ['tv/**', '.github/workflows/tv-app.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Signing key
+        env:
+          TV_KEYSTORE_B64: ${{ secrets.TV_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$TV_KEYSTORE_B64" ]; then
+            echo "$TV_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/casatv.jks"
+            echo "TV_KEYSTORE_FILE=$RUNNER_TEMP/casatv.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Sin el secret TV_KEYSTORE_B64 el APK se firma con una clave temporal."
+          fi
+      - name: Build APK
+        working-directory: tv
+        env:
+          TV_KEYSTORE_PASSWORD: ${{ secrets.TV_KEYSTORE_PASSWORD }}
+        run: ./gradlew --no-daemon :app:assembleRelease
+      - run: cp tv/app/build/outputs/apk/release/app-release.apk casatv-tv.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: casatv-tv
+          path: casatv-tv.apk
+      # Every build of main becomes the "latest" release, so
+      # https://casatv-nine.vercel.app/tv always downloads the newest APK.
+      - if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: tv-${{ github.run_number }}
+          name: App de la TV ${{ github.run_number }}
+          files: casatv-tv.apk
+          make_latest: true
