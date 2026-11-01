@@ -59,6 +59,19 @@
                 android:value="Shows notes sent from the family's phones on the TV and runs their remote-control commands." />
         </service>
 
+        <service
+            android:name=".RemoteService"
+            android:exported="true"
+            android:label="Casa TV · mando"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/remote_service" />
+        </service>
+
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

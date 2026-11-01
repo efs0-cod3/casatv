@@ -43,6 +43,9 @@ class CasaService : Service() {
 
         fun takePending(): Note? = pending.also { pending = null }
 
+        /** The remote became (un)available: tell Supabase on the next round. */
+        fun capsChanged() { instance?.capsDirty = true }
+
         /** Reply from the overlay or NoteActivity; null marks the note seen without a reply. */
         fun answer(ctx: Context, note: Note, reply: String?) {
             val key = Prefs(ctx).tvKey ?: return
@@ -198,7 +201,7 @@ class CasaService : Service() {
         }
         val args = JSONObject().put("p_tv_key", key).put("p_device_id", prefs.deviceId)
         if (capsDirty || now - lastCapsAt > 5 * 60_000) {
-            args.put("p_caps", JSONArray().apply { if (Remote.ready) put("remote") })
+            args.put("p_caps", JSONArray().apply { if (Remote.available) put("remote") })
             val apps = appsJson()
             if (apps != lastAppsJson) args.put("p_apps", JSONArray(apps))
             lastAppsJson = apps

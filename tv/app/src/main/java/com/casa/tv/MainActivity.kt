@@ -178,6 +178,7 @@ class MainActivity : Activity() {
 
     private fun refreshStatus() {
         if (!resumed || !prefs.paired) return
+        remoteView?.textSize = 18f
         val online = System.currentTimeMillis() - CasaService.lastSyncOk < 15_000
         statusView?.text = if (online) "●  Lista para recibir notas" else "○  Conectando con internet…"
         statusView?.setTextColor(if (online) Ui.OK else Ui.DIM)
@@ -188,11 +189,10 @@ class MainActivity : Activity() {
         overlayView?.setTextColor(if (overlay) Ui.OK else Ui.DIM)
 
         remoteView?.text = when {
-            !Remote.supported -> "○  Mando: este Fire TV es demasiado antiguo"
-            Remote.ready -> "●  Mando a distancia listo"
-            else -> "○  Mando: activa Ajustes → Mi Fire TV → Opciones para desarrolladores → Depuración ADB,\n     y luego «Configurar mando»"
+            Remote.available -> "●  Mando a distancia listo"
+            else -> "○  Mando sin activar: toca «Configurar mando»"
         }
-        remoteView?.setTextColor(if (Remote.ready) Ui.OK else Ui.DIM)
+        remoteView?.setTextColor(if (Remote.available) Ui.OK else Ui.DIM)
         main.postDelayed(::refreshStatus, 2000)
     }
 
@@ -201,11 +201,16 @@ class MainActivity : Activity() {
         remoteView?.setTextColor(Ui.TEXT)
         main.removeCallbacksAndMessages(null)
         CasaService.setupRemote(this) { ok ->
-            if (!ok) {
-                remoteView?.text = "✕  No se pudo conectar (${Remote.lastError ?: "sin detalle"}).\n     ¿Está activada la Depuración ADB? Prueba de nuevo."
-                remoteView?.setTextColor(Ui.ERR)
-                main.postDelayed(::refreshStatus, 20000)
-            } else refreshStatus()
+            if (ok || Remote.available) { refreshStatus(); return@setupRemote }
+            // No ADB from the TV itself (Fire OS 7.6+): use the accessibility service instead.
+            remoteView?.text = "○  Activa el servicio «Casa TV · mando» en Ajustes → Accesibilidad.\n" +
+                "     Si no aparece, desde la computadora:\n" +
+                "     adb shell settings put secure enabled_accessibility_services com.casa.tv/com.casa.tv.RemoteService\n" +
+                "     adb shell settings put secure accessibility_enabled 1"
+            remoteView?.setTextColor(Ui.TEXT)
+            remoteView?.textSize = 15f
+            try { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } catch (_: Throwable) {}
+            main.postDelayed(::refreshStatus, 60000)
         }
     }
 
