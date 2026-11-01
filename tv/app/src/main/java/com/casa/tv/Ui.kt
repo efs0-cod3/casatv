@@ -4,8 +4,14 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.StateListDrawable
 import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 
 object Ui {
@@ -30,6 +36,38 @@ object Ui {
         textSize = sp
         setTextColor(color)
         if (bold) typeface = Typeface.DEFAULT_BOLD
+    }
+
+    /**
+     * A big D-pad tile for the home screen: the app's TV banner, or its icon and name. Grows and
+     * gets a white frame when focused.
+     */
+    fun tile(ctx: Context, label: String, banner: Drawable?, icon: Drawable?, w: Int, h: Int, onClick: () -> Unit): View {
+        val frame = FrameLayout(ctx).apply {
+            isFocusable = true
+            isClickable = true
+            background = StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_focused), round(ctx, PANEL, TEXT, 16))
+                addState(intArrayOf(), round(ctx, PANEL, LINE, 16))
+            }
+            val p = dp(ctx, 4)
+            setPadding(p, p, p, p)
+            setOnClickListener { onClick() }
+            setOnFocusChangeListener { v, f -> v.animate().scaleX(if (f) 1.07f else 1f).scaleY(if (f) 1.07f else 1f).setDuration(120).start() }
+            clipToOutline = true
+        }
+        if (banner != null) {
+            frame.addView(ImageView(ctx).apply { setImageDrawable(banner); scaleType = ImageView.ScaleType.CENTER_CROP },
+                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        } else {
+            val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
+            if (icon != null) col.addView(ImageView(ctx).apply { setImageDrawable(icon) }, LinearLayout.LayoutParams(h / 2, h / 2))
+            col.addView(text(ctx, label, 16f, TEXT, bold = true).apply { gravity = Gravity.CENTER; maxLines = 1; setPadding(0, dp(ctx, 6), 0, 0) })
+            frame.addView(col, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+        frame.layoutParams = ViewGroup.MarginLayoutParams(w, h)
+        frame.contentDescription = label
+        return frame
     }
 
     /** A D-pad friendly button: light when focused, panel-coloured otherwise. */

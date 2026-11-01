@@ -30,6 +30,16 @@ class Prefs(ctx: Context) {
 
     val paired get() = tvKey != null
 
+    /** Show Casa TV's home whenever the TV's own home screen comes up (Fire TV). */
+    var homeOverride: Boolean
+        get() = sp.getBoolean("home_override", true)
+        set(v) = sp.edit().putBoolean("home_override", v).apply()
+
+    /** "Inicio de Amazon" lets the stock home stay up until this time. */
+    var homeBypassUntil: Long
+        get() = sp.getLong("home_bypass_until", 0)
+        set(v) = sp.edit().putLong("home_bypass_until", v).apply()
+
     val deviceId: String
         get() = str("device_id") ?: UUID.randomUUID().toString().also { put("device_id", it) }
 

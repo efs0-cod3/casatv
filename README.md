@@ -66,6 +66,8 @@ App de Android para Fire TV y Google TV. Muestra las notas sobre lo que se esté
 2. En Downloader escribe `casatv-nine.vercel.app/tv` y descarga e instala el APK. Si había una versión anterior de Casa TV, desinstálala antes.
 3. Abre Casa TV: muestra un QR de vinculación. Escanéalo con el móvil donde ya usas Casa TV, ponle nombre a la TV («Habitación») y toca «Vincular».
 
+**Pantalla de inicio.** Al abrir Casa TV se ve su inicio: hora, fecha y clima de Santo Domingo, YouTube y Xuper Hydra en grande, «Todas las apps», la última nota, el QR para notas y los ajustes. Fire OS no deja cambiar la pantalla de inicio, así que el servicio de accesibilidad del mando abre la de Casa TV cada vez que aparece la de Amazon (botón Inicio, al encender). «Inicio de Amazon» la deja tranquila 5 minutos, y en Ajustes de Casa TV se puede desactivar.
+
 **Activar el mando** (una sola vez)
 1. Ajustes → Mi Fire TV → Opciones para desarrolladores → **Depuración ADB**: activada. Si no ves «Opciones para desarrolladores», entra en Ajustes → Mi Fire TV → Acerca de y pulsa 7 veces sobre el nombre del dispositivo.
 2. En Casa TV, «Configurar mando». Cuando aparezca «¿Permitir depuración?», marca «Permitir siempre» y acepta.

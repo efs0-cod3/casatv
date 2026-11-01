@@ -30,10 +30,13 @@
         android:theme="@style/CasaTheme"
         android:supportsRtl="false">
 
+        <!-- Home screen. Fire OS keeps its own launcher, so RemoteService brings this one up over it. -->
         <activity
-            android:name=".MainActivity"
+            android:name=".HomeActivity"
             android:exported="true"
             android:launchMode="singleTask"
+            android:stateNotNeeded="true"
+            android:excludeFromRecents="true"
             android:screenOrientation="landscape">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -41,6 +44,17 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Pairing and settings. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <activity
+            android:name=".AllAppsActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
 
         <!-- Fallback when the app may not draw over other apps. -->
         <activity

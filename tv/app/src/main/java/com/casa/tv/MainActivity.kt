@@ -124,7 +124,8 @@ class MainActivity : Activity() {
                 loadInfo()
                 main.post {
                     CasaService.start(this)
-                    if (resumed) showHome()
+                    startActivity(Intent(this, HomeActivity::class.java))
+                    finish()
                 }
             } else {
                 if (r == null) {   // maybe the code expired or we were offline: register it again
@@ -170,7 +171,13 @@ class MainActivity : Activity() {
                 "Probar sonido" to ::playChime,
                 "Ver la última nota" to { CasaService.replay(this@MainActivity) },
             )
-            buttons("Permitir notas sobre otras apps" to ::askOverlay, "Desvincular" to ::unpair)
+            val home = buttons("Permitir notas sobre otras apps" to ::askOverlay, "" to {}, "Desvincular" to ::unpair)
+            // Middle button: whether the Home key brings up Casa TV's home screen.
+            ((home.parent as ViewGroup).getChildAt(1) as TextView).apply {
+                val label = { "Inicio de Casa TV: " + if (prefs.homeOverride) "Sí" else "No" }
+                text = label()
+                setOnClickListener { prefs.homeOverride = !prefs.homeOverride; text = label() }
+            }
         }
         first?.requestFocus()
         refreshStatus()
