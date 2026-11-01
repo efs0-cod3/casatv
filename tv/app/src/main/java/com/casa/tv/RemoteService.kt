@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.os.Build
 import android.os.SystemClock
+import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.view.accessibility.AccessibilityEvent
@@ -54,14 +55,16 @@ class RemoteService : AccessibilityService() {
     }
 
     /**
-     * The remote's Home button: a short press opens our home straight away, so Amazon's never
-     * shows. The press goes down to the system as usual (a long press still opens its quick
-     * menu); only the release, which is what makes the system go home, is kept from it.
+     * The remote's Home button. Fire OS switches to its own home as soon as the button goes down,
+     * so both the press and the release are kept from it and Casa TV's home opens on the press.
+     * (This gives up the long-press quick menu; "Ajustes del Fire TV" is on our home screen.)
      */
     override fun onKeyEvent(event: KeyEvent): Boolean {
-        if (event.keyCode != KeyEvent.KEYCODE_HOME || event.action != KeyEvent.ACTION_UP) return false
-        if (event.eventTime - event.downTime > 500 || !overrideHome()) return false
-        return openHome()
+        if (event.keyCode != KeyEvent.KEYCODE_HOME) return false
+        Log.d("CasaTV", "home key action=${event.action} repeat=${event.repeatCount}")
+        if (!overrideHome()) return false
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) openHome()
+        return true
     }
 
     private fun overrideHome(): Boolean {
