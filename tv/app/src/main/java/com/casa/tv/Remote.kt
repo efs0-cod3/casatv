@@ -1,7 +1,9 @@
 package com.casa.tv
 
 import android.content.Context
+import android.media.AudioManager
 import android.os.Build
+import android.view.KeyEvent
 import android.util.Log
 import dadb.AdbKeyPair
 import dadb.Dadb
@@ -81,9 +83,26 @@ object Remote {
         }
     }
 
+    /** ADB or the accessibility service: either is enough for the phone's remote. */
+    val available: Boolean get() = ready || RemoteService.instance != null
+
+    /** ADB when it works; otherwise media keys, the volume control and the accessibility service. */
     fun key(ctx: Context, name: String): Boolean {
         val code = keys[name] ?: return false
-        return shell(ctx, "input keyevent $code")
+        if (ready && shell(ctx, "input keyevent $code")) return true
+        val audio = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        return when (name) {
+            "play_pause", "rewind", "forward" -> {
+                audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+                audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+                true
+            }
+            "vol_up" -> { audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI); true }
+            "vol_down" -> { audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI); true }
+            "mute" -> Build.VERSION.SDK_INT >= 23 &&
+                run { audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_TOGGLE_MUTE, AudioManager.FLAG_SHOW_UI); true }
+            else -> RemoteService.instance?.key(name) ?: false
+        }
     }
 
     @Synchronized
