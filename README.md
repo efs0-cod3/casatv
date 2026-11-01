@@ -56,3 +56,25 @@ python3 -m http.server 8000
 ```
 
 Abre `http://localhost:8000`. En `http` la página intenta hablar con la TV por `/note`, así que para probar el envío real hace falta el servidor de la TV.
+
+## App de la TV (`tv/`)
+
+App de Android para Fire TV y Google TV. Muestra las notas sobre lo que se esté viendo, con un sonido y botones para responder (❤️ 👍 😂 😮 «Ya voy» «OK»), y arranca sola al encender. Además hace de **mando a distancia**: desde la pestaña «Mando» del móvil se pueden mover las flechas, OK, Atrás, Inicio, reproducir o pausar, cambiar el volumen, abrir apps y apagar o encender.
+
+**Instalar en el Fire TV**
+1. En el Fire TV, instala la app **Downloader** (de la tienda de Amazon) y permite instalar apps de origen desconocido para ella.
+2. En Downloader escribe `casatv-nine.vercel.app/tv` y descarga e instala el APK. Si había una versión anterior de Casa TV, desinstálala antes.
+3. Abre Casa TV: muestra un QR de vinculación. Escanéalo con el móvil donde ya usas Casa TV, ponle nombre a la TV («Habitación») y toca «Vincular».
+
+**Activar el mando** (una sola vez)
+1. Ajustes → Mi Fire TV → Opciones para desarrolladores → **Depuración ADB**: activada. Si no ves «Opciones para desarrolladores», entra en Ajustes → Mi Fire TV → Acerca de y pulsa 7 veces sobre el nombre del dispositivo.
+2. En Casa TV, «Configurar mando». Cuando aparezca «¿Permitir depuración?», marca «Permitir siempre» y acepta.
+
+La app usa la depuración ADB de la propia TV para pulsar teclas (`input keyevent`) con la librería [dadb](https://github.com/mobile-dev-inc/dadb). Con eso también se da a sí misma permiso para mostrar las notas sobre otras apps.
+
+**Cómo se conecta**
+- *Vinculación:* la TV registra un código aleatorio (`tv_pair_start`) y lo muestra como QR; el móvil, que ya tiene la clave de envío, lo confirma con un nombre (`tv_pair_confirm`); la TV recibe su clave una sola vez (`tv_pair_claim`). Así ninguna clave de la casa va dentro del APK ni del repositorio.
+- *Notas:* `tv_sync` cada 3 s; respuestas con `tv_answer`.
+- *Mando:* el móvil deja órdenes con `remote_send` y la TV las recoge con `tv_remote` (cada 2 s, y cada 0,35 s mientras el mando está abierto). Las órdenes de más de 20 s se descartan.
+
+**Compilar.** GitHub Actions (`.github/workflows/tv-app.yml`) compila cada cambio en `tv/`. En `main` publica el APK como última *release*; `casatv-nine.vercel.app/tv` redirige ahí. El APK se firma con la clave guardada en los *secrets* del repositorio `TV_KEYSTORE_B64` y `TV_KEYSTORE_PASSWORD`; sin ellos usa una clave temporal, y cada versión obliga a desinstalar la anterior.
