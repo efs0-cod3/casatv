@@ -11,6 +11,8 @@ La página (`index.html`) llega a la TV por uno de dos caminos:
 
 La nota puede ser un **dibujo** o un **texto escrito**. En modo «Escribir», el texto se dibuja centrado en el color elegido, con la letra más grande que quepa, y se envía como imagen igual que un dibujo. Arriba, un indicador muestra si la TV está encendida o desde cuándo está apagada (`tv_status`).
 
+Si la casa tiene **varias TVs** (tabla `tvs`), arriba aparece un botón por TV más «Todas», y el indicador muestra el estado de la elegida. El QR de cada TV puede traer `&tv=<nombre>` para dejarla elegida de entrada.
+
 Después de enviar, la página sigue el estado de la nota: **Enviada → Llegó a la TV → Vista → Respondió**. Si se cierra y se vuelve a abrir, retoma la última nota.
 
 ## App en la pantalla de inicio
@@ -26,7 +28,9 @@ La misma página se puede instalar como app: tiene su ícono, abre a pantalla co
 
 1. Tras enviar, el móvil se suscribe a Web Push y guarda la suscripción en su nota (`note_push`).
 2. Cuando la TV responde (`tv_answer`), el disparador `notes_reply_push` llama a la función `notify-reply` con `pg_net`.
-3. `notify-reply` firma el aviso con la clave VAPID privada (guardada en Supabase Vault) y lo manda una vez por respuesta.
+3. `notify-reply` firma el aviso con la clave VAPID privada (guardada en Supabase Vault) y lo manda una vez por respuesta. Con varias TVs, dice cuál respondió («Sala respondió ❤️»).
+
+Con varias TVs, `send_note` crea una nota por TV y devuelve el id del grupo; `note_push` suscribe todas las notas del grupo.
 
 ## Archivos
 
