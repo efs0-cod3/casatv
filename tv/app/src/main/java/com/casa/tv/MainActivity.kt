@@ -202,9 +202,9 @@ class MainActivity : Activity() {
         main.removeCallbacksAndMessages(null)
         CasaService.setupRemote(this) { ok ->
             if (!ok) {
-                remoteView?.text = "✕  No se pudo. ¿Está activada la Depuración ADB? Prueba de nuevo."
+                remoteView?.text = "✕  No se pudo conectar (${Remote.lastError ?: "sin detalle"}).\n     ¿Está activada la Depuración ADB? Prueba de nuevo."
                 remoteView?.setTextColor(Ui.ERR)
-                main.postDelayed(::refreshStatus, 6000)
+                main.postDelayed(::refreshStatus, 20000)
             } else refreshStatus()
         }
     }
