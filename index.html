@@ -120,6 +120,7 @@
   .apps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .apps button { height: 46px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .apps:empty { display: none; }
+  .apps button.more { color: var(--dim); }
   /* Pairing a new TV */
   .sheet { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.6); display: grid; align-items: end; padding: 16px; }
   .sheet[hidden] { display: none; }
@@ -634,7 +635,9 @@
   // Remote control: TVs running the new Casa TV app with remote support (tv_status → remote).
   const rtvsEl = document.getElementById('rtvs'), rappsEl = document.getElementById('rapps'),
         rtitle = document.getElementById('rtitle'), mRemote = document.getElementById('mRemote');
-  let remoteTarget = null, pingTimer = null;
+  let remoteTarget = null, pingTimer = null, moreApps = false;
+  // YouTube (Fire TV and Google TV) and Xuper.
+  const FAV_APPS = ['com.amazon.firetv.youtube', 'com.google.android.youtube.tv', 'com.xuper.netxxus'];
   try { remoteTarget = localStorage.getItem('casa-remote'); } catch (e) {}
   function renderRemote() {
     const list = tvs.filter(t => t.remote);
@@ -657,16 +660,25 @@
     });
     const tv = list.find(t => t.id === remoteTarget);
     rtitle.textContent = `Mando de ${tv.name} · ${tv.on ? 'encendida' : 'apagada'}`;
+    // Favourite apps first; the rest stay behind "Más apps".
     const apps = Array.isArray(tv.apps) ? tv.apps : [];
-    const sig = tv.id + JSON.stringify(apps);
+    const favs = apps.filter(a => FAV_APPS.includes(a.pkg));
+    const shown = favs.length && !moreApps ? favs : apps;
+    const sig = tv.id + JSON.stringify(shown) + moreApps;
     if (rappsEl.dataset.sig !== sig) {
       rappsEl.dataset.sig = sig;
       rappsEl.innerHTML = '';
-      apps.slice(0, 18).forEach(a => {
+      shown.slice(0, 30).forEach(a => {
         const b = document.createElement('button');
         b.type = 'button'; b.dataset.cmd = 'launch'; b.dataset.arg = a.pkg; b.textContent = a.label;
         rappsEl.appendChild(b);
       });
+      if (favs.length && favs.length < apps.length) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'more'; b.textContent = moreApps ? 'Menos ▴' : 'Más apps ▾';
+        b.onclick = () => { moreApps = !moreApps; renderRemote(); };
+        rappsEl.appendChild(b);
+      }
     }
   }
   async function remoteSend(cmd, arg) {
