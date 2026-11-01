@@ -2,9 +2,12 @@ package com.casa.tv
 
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import dadb.AdbKeyPair
 import dadb.Dadb
 import java.io.File
+import java.net.Inet4Address
+import java.net.NetworkInterface
 
 /**
  * Runs remote-control keys on this TV through its own ADB ("Depuración ADB" on Fire TV).
@@ -23,26 +26,46 @@ object Remote {
 
     val supported get() = Build.VERSION.SDK_INT >= 26   // dadb needs java.util.Base64
 
+    /** Why the last connection failed, shown on the setup screen. */
+    @Volatile var lastError: String? = null
+
     val ready: Boolean
         @Synchronized get() = dadb != null
 
     /** Blocks while the TV shows the permission prompt. Call from a background thread. */
     @Synchronized
     fun connect(ctx: Context): Boolean {
-        if (!supported) return false
+        if (!supported) { lastError = "Android ${Build.VERSION.SDK_INT}: hace falta Fire OS 7 o superior"; return false }
         if (dadb != null) return true
-        return try {
-            val d = Dadb.create("127.0.0.1", 5555, keyPair(ctx))
-            d.shell("echo ok")
-            dadb = d
-            Prefs(ctx).remoteOk = true
-            // Notes may now draw over other apps; Fire TV has no settings screen for this.
-            d.shell("appops set ${ctx.packageName} SYSTEM_ALERT_WINDOW allow")
-            true
-        } catch (e: Throwable) {
-            false
-        }
+        val keys = try { keyPair(ctx) } catch (e: Throwable) { return fail("clave", e) }
+        // adbd may listen only on the network address on some Fire OS versions, so try that too.
+        val d = (listOf("127.0.0.1") + lanAddresses()).firstNotNullOfOrNull { host ->
+            try {
+                Dadb.create(host, 5555, keys).also { it.shell("echo ok") }
+            } catch (e: Throwable) { fail(host, e); null }
+        } ?: return false
+        lastError = null
+        dadb = d
+        Prefs(ctx).remoteOk = true
+        // Notes may now draw over other apps; Fire TV has no settings screen for this.
+        try { d.shell("appops set ${ctx.packageName} SYSTEM_ALERT_WINDOW allow") } catch (e: Throwable) { fail("permiso", e) }
+        return true
     }
+
+    private fun fail(where: String, e: Throwable): Boolean {
+        lastError = "$where: ${e.javaClass.simpleName}${e.message?.let { " – $it" } ?: ""}"
+        Log.w("CasaTV", "remote $where", e)
+        return false
+    }
+
+    private fun lanAddresses(): List<String> = try {
+        NetworkInterface.getNetworkInterfaces().toList()
+            .filter { it.isUp && !it.isLoopback }
+            .flatMap { it.inetAddresses.toList() }
+            .filterIsInstance<Inet4Address>()
+            .map { it.hostAddress ?: "" }
+            .filter { it.isNotEmpty() }
+    } catch (_: Throwable) { emptyList() }
 
     @Synchronized
     fun shell(ctx: Context, cmd: String): Boolean {
